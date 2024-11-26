@@ -2,7 +2,7 @@ const commentConverter = row => ({
     date: row.comment_date,
     text: row.comment_text,
     userName: row.user_name
-})
+});
 
 class CommentDao {
 
@@ -11,81 +11,60 @@ class CommentDao {
     }
 
     add(text, photoId, userId) {
-        return new Promise((resolve, reject) => {
-            this._db.run(`
-                    INSERT INTO comment (
-                        comment_date, 
-                        comment_text, 
-                        photo_id,
-                        user_id
-                    ) values (?,?,?, ?)
-                `,
-                [
-                    new Date(),
-                    text,
-                    photoId,
-                    userId,
-                ],
-                function (err) {
-                    if (err) {
-                        console.log(err);
-                        return reject('Can`t add comment');
-                    }
-                    resolve(this.lastID);
-                });
-        });
+        try {
+            const stmt = this._db.prepare(`
+                INSERT INTO comment (
+                    comment_date, 
+                    comment_text, 
+                    photo_id,
+                    user_id
+                ) values (?,?,?, ?)
+            `);
+            stmt.run(new Date(), text, photoId, userId);
+            return stmt.lastInsertRowid;  // retorna o ID do último comentário inserido
+        } catch (err) {
+            console.log(err);
+            throw new Error("Can't add comment");
+        }
     }
 
     listAllFromPhoto(photoId) {
-
-        return new Promise((resolve, reject) => {
-            this._db.all(
-                `
+        try {
+            const rows = this._db.prepare(`
                 SELECT 
                     c.comment_date, c.comment_text, u.user_name 
                 FROM comment as c 
                     JOIN user as u ON u.user_id = c.user_id 
                 WHERE c.photo_id = ? 
                 ORDER BY c.comment_date DESC  
-                `,
-                [photoId],
-                (err, rows) => {
+            `).all(photoId);
 
-                    if (err) {
-                        console.log(err);
-                        return reject('Can`t load comments');
-                    }
-                    const comments = rows.map(commentConverter);
-                    return resolve(comments);
-                }
-            );
-
-        });
+            return rows.map(commentConverter);
+        } catch (err) {
+            console.log(err);
+            throw new Error("Can't load comments");
+        }
     }
 
     findById(commentId) {
-
-        return new Promise((resolve, reject) => {
-            this._db.get(
-                `
+        try {
+            const row = this._db.prepare(`
                 SELECT 
                     c.comment_date, c.comment_text, u.user_name 
                 FROM comment as c 
                     JOIN user as u ON u.user_id = c.user_id 
                 WHERE c.comment_id = ?
-                `,
-                [commentId],
-                (err, row) => {
-                    console.log(row);
-                    if (err) {
-                        console.log(err);
-                        return reject('Can`t load comment');
-                    }
-                    return resolve(commentConverter(row));
-                }
-            );
+            `).get(commentId);
 
-        });
+            if (row) {
+                return commentConverter(row);
+            } else {
+                return null;
+            }
+        } catch (err) {
+            console.log(err);
+            throw new Error("Can't load comment");
+        }
     }
 }
 
